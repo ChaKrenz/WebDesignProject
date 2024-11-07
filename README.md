@@ -27,7 +27,7 @@ The game provides a fast-paced experience where players race against time to rea
 
 #### Target Audience
 This game is intended for a broad audience:
-- **Ages:** 12 and up
+- **Ages:** 8 and up
 - **Interests:** Speedrunning, racing, platforming games, competitive gaming
 - **Needs:** The game addresses the desire for high-speed, skill-based gameplay, and leaderboard-driven motivation for constant self-improvement.
 
@@ -38,7 +38,7 @@ This game is intended for a broad audience:
 ### Aesthetics (Look)
 
 #### Visual Style
-- **Theme:** Futuristic and sleek, inspired by a cyberpunk aesthetic. Levels feature vibrant neon colors and metallic surfaces, creating an energetic atmosphere.
+- **Theme:** Futuristic and sleek, inspired by a cyberpunk aesthetic. Levels feature vibrant neon colors and metallic surfaces, creating an energetic atmosphere. This doesn't necessarily have to be what the user sees... maybe add a feature so the user can switch how their screen looks while they are doing it.
 - **Imagery/Iconography:** Futuristic icons for tools and power-ups, minimalist HUD elements for a clean and immersive visual experience.
 
 #### Color Scheme
@@ -65,6 +65,7 @@ This game is intended for a broad audience:
 
 #### Controls
 
+- **View Panning:** Use the mouse to shift perspectivie similar to minecraft. This should be a first person point of view and there should be some screen shake to make it look as if the user is running.
 - **Movement:** `W`, `A`, `S`, `D` keys for forward, left, back, and right movement.
 - **Jump:** `Space` to jump, with controlled height based on how long the key is held.
 - **Inventory Access:** `E` key to open the inventory, allowing players to view and equip items.
