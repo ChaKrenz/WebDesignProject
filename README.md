@@ -8,7 +8,7 @@ To design a 3D speedrunning game where the player's objective is to complete the
 
 ## Introduction
 
-The game focuses on speed, agility, and efficient use of collected tools to reach the finish line in record time. With minimal distractions, the design prioritizes an engaging player experience by incorporating interactive elements that enhance the game’s excitement without overwhelming the player.
+The game emphasizes speed, agility, and efficient use of collected tools to reach the finish line in record time. With minimal distractions, the design prioritizes an engaging player experience by incorporating interactive elements that enhance the game’s excitement without overwhelming the player.
 
 ---
 
@@ -63,14 +63,48 @@ This game is intended for a broad audience:
 - **Leaderboard:** Displays the top scores globally, allowing players to compete for the fastest times.
 - **Time Tracker:** Real-time tracking of the player’s current run time, displayed in the HUD.
 
+#### Controls
+
+- **Movement:** `W`, `A`, `S`, `D` keys for forward, left, back, and right movement.
+- **Jump:** `Space` to jump, with controlled height based on how long the key is held.
+- **Inventory Access:** `E` key to open the inventory, allowing players to view and equip items.
+- **Tool Activation:** Certain tools are automatically equipped when collected, while others may require manual activation through hotkeys (e.g., `1`, `2`, `3` for speed boosts, grappling hook, and time-slowing gadget).
+
+---
+
+#### Abilities and Tools
+
+1. **Speed Boosts**
+   - **Effect:** Temporarily increases the player's speed, allowing for quick dashes.
+   - **Use:** Essential for overcoming longer jumps or dashing through long sections with minimal obstacles.
+   - **Duration:** Typically lasts for 2–3 seconds with a cooldown period before it can be used again.
+
+2. **Grappling Hook**
+   - **Effect:** Allows the player to grapple onto specific points, quickly propelling them across gaps or pulling them up to higher platforms.
+   - **Use:** Useful for vertical navigation or bypassing lengthy sections.
+   - **Mechanic:** Players aim at a designated grapple point and press the assigned hotkey to activate.
+
+3. **Time-Slow Gadget**
+   - **Effect:** Temporarily slows down time, allowing the player to better control movements or react to obstacles.
+   - **Use:** Helps in areas with a high density of obstacles, tight corners, or sharp turns.
+   - **Duration:** Lasts for approximately 5 seconds, with a cooldown period.
+
+4. **Inventory System**
+   - **Purpose:** Allows players to manage collected tools and power-ups.
+   - **Functionality:** Accessible by pressing `E`. Players can equip or discard tools as needed based on the upcoming obstacles or path layout.
+
 #### User Flow
+
 1. **Start Game:** Player selects “Start Game” from the main menu.
 2. **In-Game Navigation:** Player navigates the course, collecting tools and using them to overcome obstacles.
 3. **Finish Line:** Upon reaching the finish, the player’s time is displayed.
 4. **Leaderboard Update:** If the player's time is one of the fastest, it is uploaded to the leaderboard.
 5. **Replay or Exit:** The player can choose to try again or return to the main menu.
 
-#### Interactive Elements
+---
+
+### Interactive Elements
+
 - **Tools/Resources:** Includes speed boosts, a grappling hook for quick traversal, and a time-slow gadget. Each tool is visually distinct and highlights the cyberpunk theme.
 - **Leaderboards:** Accessible from the main menu, showcasing top players and their scores globally. A local leaderboard is also available to track personal progress.
 
@@ -101,5 +135,3 @@ This game is intended for a broad audience:
 
 3. **Leaderboard Mockup**
    - Neon text and a dark background, with animations for score updates to create a dynamic leaderboard experience.
-
----
