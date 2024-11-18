@@ -1,4 +1,4 @@
-# 3D Speedrunning Game Design Document
+#3D Speedrunning Game Design Document
 
 ## Objective
 
