@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minecraft Speedrun Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; cursor: none; }
+        canvas { width: 100%; height: 100%; }
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1000;
+        }
+        #minimap {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+            background-color: rgba(0,0,0,0.5);
+            border: 2px solid white;
+            z-index: 1000;
+        }
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <div id="minimap">
+        <canvas id="minimap-canvas"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);  // Black void color
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapContext = minimapCanvas.getContext('2d');
+        minimapCanvas.width = 200;
+        minimapCanvas.height = 200;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        function generateSpeedrunMap() {
+            const groundGeometry = new THREE.PlaneGeometry(300, 100);  // Rectangular base
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x5C4033 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+
+            function createWall(x, z, width, height, rotation = 0) {
+                const geometry = new THREE.BoxGeometry(width, height, 1);
+                const material = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const wall = new THREE.Mesh(geometry, material);
+                wall.position.set(x, height/2, z);
+                wall.rotation.y = rotation;
+                
+                const topGeometry = new THREE.BoxGeometry(width, 0.1, 1);
+                const topMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, transparent: true, opacity: 0.5 });
+                const topSurface = new THREE.Mesh(topGeometry, topMaterial);
+                topSurface.position.set(x, height, z);
+                topSurface.rotation.y = rotation;
+                
+                scene.add(wall);
+                scene.add(topSurface);
+                return { wall, topSurface };
+            }
+
+            const wallConfigs = [
+                { x: -50, z: -10, width: 20, height: 5 },
+                { x: 20, z: 10, width: 30, height: 5 },
+                { x: 100, z: -5, width: 25, height: 5, rotation: Math.PI/4 }
+            ];
+
+            const walls = wallConfigs.map(config => createWall(
+                config.x, config.z, config.width, config.height, config.rotation || 0
+            ));
+
+            function createObstacle(x, z, size, color) {
+                const geometry = new THREE.BoxGeometry(size, size, size);
+                const material = new THREE.MeshStandardMaterial({ color: color });
+                const obstacle = new THREE.Mesh(geometry, material);
+                obstacle.position.set(x, size/2, z);
+                
+                const topGeometry = new THREE.BoxGeometry(size, 0.1, size);
+                const topMaterial = new THREE.MeshStandardMaterial({ color: color, transparent: true, opacity: 0.5 });
+                const topSurface = new THREE.Mesh(topGeometry, topMaterial);
+                topSurface.position.set(x, size, z);
+                
+                scene.add(obstacle);
+                scene.add(topSurface);
+                return { obstacle, topSurface };
+            }
+
+            const obstacles = [];
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * 250 - 125;
+                const z = Math.random() * 90 - 45;  // Adjusted for larger base
+                const size = Math.random() * 3 + 1;
+                const color = Math.random() * 0xffffff;
+                obstacles.push(createObstacle(x, z, size, color));
+            }
+
+            const checkpointGeometry = new THREE.SphereGeometry(2, 32, 32);
+            const checkpointMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00, 
+                opacity: 0.7, 
+                transparent: true 
+            });
+            const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+            checkpoint.position.set(140, 1, 0);
+            scene.add(checkpoint);
+
+            return { obstacles, checkpoint, walls };
+        }
+
+        const { obstacles, checkpoint, walls } = generateSpeedrunMap();
+
+        const playerHeight = 1.8;
+        const playerRadius = 0.5;
+        const gravity = 0.01;
+        const jumpStrength = 0.2;
+        const stepHeight = 0.5;
+
+        const playerObject = new THREE.Object3D();
+        const startPosition = new THREE.Vector3(-140, playerHeight, 0);
+        playerObject.position.copy(startPosition);
+        scene.add(playerObject);
+        playerObject.add(camera);
+
+        const baseSpeed = 0.1;
+        const sprintMultiplier = 3;
+        const keys = {
+            w: false, a: false, s: false, d: false,
+            shift: false, space: false
+        };
+
+        let verticalVelocity = 0;
+        let isGrounded = true;
+
+        let bobCycle = 0;
+        let bobFrequency = 0.2;
+        let bobAmplitudeX = 0.05;
+        let bobAmplitudeY = 0.1;
+        let walkCycle = 0;
+
+        function checkCollisions(newPosition) {
+            const playerRadius = 0.5;
+            
+            const allCollisionObjects = [
+                ...walls.map(w => w.wall), 
+                ...walls.map(w => w.topSurface),
+                ...obstacles.map(o => o.obstacle), 
+                ...obstacles.map(o => o.topSurface)
+            ];
+            
+            for (let obj of allCollisionObjects) {
+                const objBox = new THREE.Box3().setFromObject(obj);
+                
+                const collisionMargin = new THREE.Vector3(playerRadius, playerHeight/2, playerRadius);
+                const playerBox = new THREE.Box3(
+                    newPosition.clone().sub(collisionMargin),
+                    newPosition.clone().add(new THREE.Vector3(playerRadius, playerHeight, playerRadius))
+                );
+
+                if (playerBox.intersectsBox(objBox)) {
+                    return true;
+                }
+            }
+
+            const checkpointBox = new THREE.Box3().setFromObject(checkpoint);
+            if (new THREE.Box3().setFromObject(playerObject).intersectsBox(checkpointBox)) {
+                alert("Checkpoint reached! Great job!");
+            }
+
+            // Check if player falls off the ground platform
+            if (newPosition.x < -150 || newPosition.x > 150 || 
+                newPosition.z < -50 || newPosition.z > 50 || 
+                newPosition.y < -10) {  // Fall into void
+                // Respawn at start
+                playerObject.position.copy(startPosition);
+                verticalVelocity = 0;
+                isGrounded = true;
+            }
+
+            return false;
+        }
+
+        document.addEventListener('keydown', (event) => {
+            switch(event.key.toLowerCase()) {
+                case 'w': keys.w = true; break;
+                case 'a': keys.a = true; break;
+                case 's': keys.s = true; break;
+                case 'd': keys.d = true; break;
+                case 'shift': keys.shift = true; break;
+                case ' ': 
+                    keys.space = true;
+                    if (isGrounded) {
+                        verticalVelocity = jumpStrength;
+                        isGrounded = false;
+                    }
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            switch(event.key.toLowerCase()) {
+                case 'w': keys.w = false; break;
+                case 'a': keys.a = false; break;
+                case 's': keys.s = false; break;
+                case 'd': keys.d = false; break;
+                case 'shift': keys.shift = false; break;
+                case ' ': keys.space = false; break;
+            }
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            playerObject.rotation.y -= event.movementX * 0.002;
+            
+            let pitch = camera.rotation.x - event.movementY * 0.002;
+            pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+            camera.rotation.x = pitch;
+        });
+
+        renderer.domElement.addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+        });
+
+        function renderMinimap() {
+            minimapContext.clearRect(0, 0, 200, 200);
+            minimapContext.fillStyle = 'gray';
+            minimapContext.fillRect(0, 0, 200, 200);
+
+            const mapScale = 2;
+
+            minimapContext.fillStyle = 'black';
+            walls.forEach(wall => {
+                const x = 100 + (wall.wall.position.x - playerObject.position.x) * mapScale;
+                const z = 100 + (wall.wall.position.z - playerObject.position.z) * mapScale;
+                
+                if (x >= 0 && x <= 200 && z >= 0 && z <= 200) {
+                    minimapContext.beginPath();
+                    minimapContext.rect(x, z, 10, 10);
+                    minimapContext.fill();
+                }
+            });
+
+            minimapContext.fillStyle = 'green';
+            obstacles.forEach(obstacle => {
+                const x = 100 + (obstacle.obstacle.position.x - playerObject.position.x) * mapScale;
+                const z = 100 + (obstacle.obstacle.position.z - playerObject.position.z) * mapScale;
+                
+                if (x >= 0 && x <= 200 && z >= 0 && z <= 200) {
+                    minimapContext.beginPath();
+                    minimapContext.rect(x, z, 5, 5);
+                    minimapContext.fill();
+                }
+            });
+
+            minimapContext.fillStyle = 'blue';
+            const checkpointX = 100 + (checkpoint.position.x - playerObject.position.x) * mapScale;
+            const checkpointZ = 100 + (checkpoint.position.z - playerObject.position.z) * mapScale;
+            
+            if (checkpointX >= 0 && checkpointX <= 200 && checkpointZ >= 0 && checkpointZ <= 200) {
+                minimapContext.beginPath();
+                minimapContext.arc(checkpointX, checkpointZ, 5, 0, Math.PI * 2);
+                minimapContext.fill();
+            }
+
+            minimapContext.fillStyle = 'red';
+            minimapContext.beginPath();
+            minimapContext.arc(100, 100, 5, 0, Math.PI * 2);
+            minimapContext.fill();
+        }
+
+        function updateMovement() {
+            const moveDirection = new THREE.Vector3();
+            
+            const currentSpeed = keys.shift ? baseSpeed * sprintMultiplier : baseSpeed;
+
+            let movementSpeedMultiplier = 1;
+            if (keys.a || keys.d) movementSpeedMultiplier = 0.7;
+            if (keys.s) movementSpeedMultiplier = 0.5;
+
+            if (keys.w) moveDirection.z -= 1;
+            if (keys.s) moveDirection.z += 1;
+            if (keys.a) moveDirection.x -= 1;
+            if (keys.d) moveDirection.x += 1;
+
+            moveDirection.normalize();
+
+            verticalVelocity -= gravity;
+            playerObject.position.y += verticalVelocity;
+
+            if (playerObject.position.y <= playerHeight) {
+                playerObject.position.y = playerHeight;
+                verticalVelocity = 0;
+                isGrounded = true;
+            }
+
+            if (moveDirection.length() > 0) {
+                walkCycle += bobFrequency;
+                const bobX = Math.sin(walkCycle) * bobAmplitudeX;
+                const bobY = Math.abs(Math.sin(walkCycle * 2)) * bobAmplitudeY;
+                camera.position.x = bobX;
+                camera.position.y = bobY;
+
+                const rotatedDirection = moveDirection.applyQuaternion(playerObject.quaternion);
+                const newPosition = playerObject.position.clone().add(
+                    rotatedDirection.multiplyScalar(currentSpeed * movementSpeedMultiplier)
+                );
+                
+                if (!checkCollisions(newPosition)) {
+                    playerObject.position.copy(newPosition);
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateMovement();
+            renderMinimap();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
