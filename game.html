@@ -1,351 +1,634 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Minecraft Speedrun Game</title>
+    <title>3D Parkour</title>
     <style>
-        body { margin: 0; overflow: hidden; cursor: none; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
         canvas { width: 100%; height: 100%; }
-        #crosshair {
+        #menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #menu button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+        #color-select {
+            margin: 10px;
+            padding: 5px;
+        }
+        #sprint-meter {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background: #333;
+            border: 2px solid #fff;
+        }
+        #sprint-progress {
+            width: 100%;
+            height: 100%;
+            background: #4CAF50;
+            transition: width 0.1s linear;
+        }
+        #checkpoint-message {
             position: fixed;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
-            border: 2px solid white;
             transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 1000;
+            color: white;
+            font-size: 24px;
+            display: none;
         }
-        #minimap {
+        #level-display {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 200px;
-            height: 200px;
-            background-color: rgba(0,0,0,0.5);
-            border: 2px solid white;
-            z-index: 1000;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 20px;
         }
-        #minimap-canvas {
+        #timer-display {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 20px;
+        }
+        #final-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
         }
     </style>
 </head>
 <body>
-    <div id="crosshair"></div>
-    <div id="minimap">
-        <canvas id="minimap-canvas"></canvas>
+    <div id="menu">
+        <h1>3D Parkour</h1>
+        <button id="start-game">Start Game</button>
+        <button id="show-controls">Show Controls</button>
+        <div id="controls-info" style="display:none; color: white; text-align: center; margin-top: 20px;">
+            <h3>Controls</h3>
+            <p>SHIFT - Sprint</p>
+            <p>W - Forward</p>
+            <p>A - Left</p>
+            <p>D - Right</p>
+            <p>S - Backward</p>
+            <p>SPACE - Jump</p>
+            <h3>Rules</h3>
+            <p>You must stand on the checkpoint platform to move onto the next level.</p>
+        </div>
+        <label for="background-color">Background Color:</label>
+        <select id="color-select">
+            <option value="#FFFFFF">White</option>
+            <option value="#87CEEB">Sky Blue</option>
+            <option value="#000000">Black</option>
+            <option value="#2F4F4F">Dark Slate Gray</option>
+            <option value="#191970">Midnight Blue</option>
+        </select>
     </div>
+    <div id="sprint-meter">
+        <div id="sprint-progress"></div>
+    </div>
+    <div id="checkpoint-message">Level Complete!</div>
+    <div id="level-display">Level: 1</div>
+    <div id="timer-display">Time: 0:00</div>
+    <div id="final-screen">
+        <h1>Game Completed!</h1>
+        <p id="final-time">Final Time: 0:00</p>
+        <button id="restart-game">Play Again</button>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
+        // Game timer variables
+        let startTime;
+        let timerInterval;
+        let totalTime = 0;
+
+        // Get DOM elements
+        const menuElement = document.getElementById('menu');
+        const startGameButton = document.getElementById('start-game');
+        const showControlsButton = document.getElementById('show-controls');
+        const controlsInfo = document.getElementById('controls-info');
+        const colorSelect = document.getElementById('color-select');
+        const timerDisplay = document.getElementById('timer-display');
+        const finalScreen = document.getElementById('final-screen');
+        const finalTimeElement = document.getElementById('final-time');
+        const restartGameButton = document.getElementById('restart-game');
+        const sprintProgressElement = document.getElementById('sprint-progress');
+        const levelDisplayElement = document.getElementById('level-display');
+
+        // Controls button event listener
+        showControlsButton.addEventListener('click', () => {
+            if (controlsInfo.style.display === 'none') {
+                controlsInfo.style.display = 'block';
+            } else {
+                controlsInfo.style.display = 'none';
+            }
+        });
+
+        // Prevent default browser behavior
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Create scene, camera, and renderer BEFORE startGame function
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000);  // Black void color
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const minimapCanvas = document.getElementById('minimap-canvas');
-        const minimapContext = minimapCanvas.getContext('2d');
-        minimapCanvas.width = 200;
-        minimapCanvas.height = 200;
-
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
         scene.add(ambientLight);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(5, 5, 5);
+        directionalLight.position.set(1, 1, 1);
         scene.add(directionalLight);
 
-        function generateSpeedrunMap() {
-            const groundGeometry = new THREE.PlaneGeometry(300, 100);  // Rectangular base
-            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x5C4033 });
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            scene.add(ground);
+        // Levels array will be copied here
+        const levels = [
+            // Level 1 - Simple Straight Path (revised)
+            [
+                { pos: [30, 0, 0], size: [40, 1, 5], color: 0x444444 }, // Single long platform
+                { pos: [60, 0, 0], size: [10, 1, 5], color: 0x00ff00 } // Checkpoint platform
+            ],
+            
+            // Level 2 - Basic jumps (adjusted spacing for better flow)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [7, 1, 0], size: [4, 1, 4], color: 0x666666 },
+                { pos: [14, 1, 0], size: [4, 1, 4], color: 0x666666 },
+                { pos: [22, 1, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            function createWall(x, z, width, height, rotation = 0) {
-                const geometry = new THREE.BoxGeometry(width, height, 1);
-                const material = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-                const wall = new THREE.Mesh(geometry, material);
-                wall.position.set(x, height/2, z);
-                wall.rotation.y = rotation;
-                
-                const topGeometry = new THREE.BoxGeometry(width, 0.1, 1);
-                const topMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, transparent: true, opacity: 0.5 });
-                const topSurface = new THREE.Mesh(topGeometry, topMaterial);
-                topSurface.position.set(x, height, z);
-                topSurface.rotation.y = rotation;
-                
-                scene.add(wall);
-                scene.add(topSurface);
-                return { wall, topSurface };
-            }
+            // Level 3 - Introduced moving platforms
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [10, 2, -3], size: [3, 1, 3], color: 0x666666, moving: { axis: 'x', range: 5, speed: 1 } },
+                { pos: [20, 4, 3], size: [3, 1, 3], color: 0x666666, moving: { axis: 'z', range: 3, speed: 1 } },
+                { pos: [30, 6, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            const wallConfigs = [
-                { x: -50, z: -10, width: 20, height: 5 },
-                { x: 20, z: 10, width: 30, height: 5 },
-                { x: 100, z: -5, width: 25, height: 5, rotation: Math.PI/4 }
-            ];
+            // Level 4 - Curved path (improved diagonal feel)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [8, 1, 8], size: [3, 1, 3], color: 0x666666 },
+                { pos: [16, 2, 16], size: [3, 1, 3], color: 0x666666 },
+                { pos: [24, 3, 24], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            const walls = wallConfigs.map(config => createWall(
-                config.x, config.z, config.width, config.height, config.rotation || 0
-            ));
+            // Level 5 - Alternating heights (adjusted difficulty)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [10, 2, -2], size: [3, 1, 3], color: 0x666666 },
+                { pos: [20, 0, 2], size: [3, 1, 3], color: 0x666666 },
+                { pos: [30, 3, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            function createObstacle(x, z, size, color) {
-                const geometry = new THREE.BoxGeometry(size, size, size);
-                const material = new THREE.MeshStandardMaterial({ color: color });
-                const obstacle = new THREE.Mesh(geometry, material);
-                obstacle.position.set(x, size/2, z);
-                
-                const topGeometry = new THREE.BoxGeometry(size, 0.1, size);
-                const topMaterial = new THREE.MeshStandardMaterial({ color: color, transparent: true, opacity: 0.5 });
-                const topSurface = new THREE.Mesh(topGeometry, topMaterial);
-                topSurface.position.set(x, size, z);
-                
-                scene.add(obstacle);
-                scene.add(topSurface);
-                return { obstacle, topSurface };
-            }
+            // Level 6 - Introduced wide gaps (better variety)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [12, 2, -3], size: [3, 1, 3], color: 0x666666 },
+                { pos: [24, 2, 3], size: [3, 1, 3], color: 0x666666 },
+                { pos: [36, 4, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            const obstacles = [];
-            for (let i = 0; i < 20; i++) {
-                const x = Math.random() * 250 - 125;
-                const z = Math.random() * 90 - 45;  // Adjusted for larger base
-                const size = Math.random() * 3 + 1;
-                const color = Math.random() * 0xffffff;
-                obstacles.push(createObstacle(x, z, size, color));
-            }
+            // Level 7 - Added mid-platform branching paths
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [10, 2, -5], size: [3, 1, 3], color: 0x666666 },
+                { pos: [10, 2, 5], size: [3, 1, 3], color: 0x666666 },
+                { pos: [20, 4, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            const checkpointGeometry = new THREE.SphereGeometry(2, 32, 32);
-            const checkpointMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0x00ff00, 
-                opacity: 0.7, 
-                transparent: true 
-            });
-            const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-            checkpoint.position.set(140, 1, 0);
-            scene.add(checkpoint);
+            // Level 8 - Zig-zag paths for 3D challenge
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [10, 0, 3], size: [2, 1, 2], color: 0x666666 },
+                { pos: [20, 0, -3], size: [2, 1, 2], color: 0x666666 },
+                { pos: [30, 0, 3], size: [2, 1, 2], color: 0x666666 },
+                { pos: [40, 0, -3], size: [2, 1, 2], color: 0x666666 },
+                { pos: [50, 0, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-            return { obstacles, checkpoint, walls };
-        }
+            // Level 9 - Tight maze (revised layout)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [8, 0, 8], size: [3, 1, 3], color: 0x666666 },
+                { pos: [16, 0, -8], size: [3, 1, 3], color: 0x666666 },
+                { pos: [24, 0, 4], size: [3, 1, 3], color: 0x666666 },
+                { pos: [32, 0, -4], size: [3, 1, 3], color: 0x666666 },
+                { pos: [40, 0, 0], size: [5, 1, 5], color: 0x00ff00 }
+            ],
 
-        const { obstacles, checkpoint, walls } = generateSpeedrunMap();
+            // Level 10 - Ultimate precision test (tightened layout)
+            [
+                { pos: [0, 0, 0], size: [5, 1, 5], color: 0x444444 },
+                { pos: [10, 0, -4], size: [2, 1, 2], color: 0x666666 },
+                { pos: [20, 0, 4], size: [2, 1, 2], color: 0x666666 },
+                { pos: [30, 0, -4], size: [2, 1, 2], color: 0x666666 },
+                { pos: [40, 0, 4], size: [2, 1, 2], color: 0x666666 },
+                { pos: [50, 0, 0], size: [3, 1, 3], color: 0x666666 },
+                { pos: [55, 0, 0], size: [10, 1, 4], color: 0x00ff00 }
+            ]
+        ];
 
-        const playerHeight = 1.8;
-        const playerRadius = 0.5;
-        const gravity = 0.01;
-        const jumpStrength = 0.2;
-        const stepHeight = 0.5;
 
-        const playerObject = new THREE.Object3D();
-        const startPosition = new THREE.Vector3(-140, playerHeight, 0);
-        playerObject.position.copy(startPosition);
-        scene.add(playerObject);
-        playerObject.add(camera);
-
-        const baseSpeed = 0.1;
-        const sprintMultiplier = 3;
-        const keys = {
-            w: false, a: false, s: false, d: false,
-            shift: false, space: false
+        // Player configuration
+        const player = {
+            height: 2,
+            maxSpeed: 0.15,
+            maxSprintSpeed: 0.25,
+            acceleration: 0.008,
+            sprintAcceleration: 0.012,
+            jumpForce: 0.4,
+            gravity: 0.02,
+            velocity: new THREE.Vector3(),
+            canJump: true,
+            sprinting: false,
+            sprintEnergy: 100,
+            sprintDrain: 1,
+            sprintRecharge: 0.5,
+            position: new THREE.Vector3(0, 2, 0),
+            spawnPoint: new THREE.Vector3(0, 2, 0),
+            isGrounded: false,
+            groundFriction: 0.92,
+            airFriction: 0.99,
+            currentLevel: 1,
+            bobOffset: 0,
+            bobFrequency: 0.1,
+            bobAmount: 0.1,
+            canTransition: true,
+            voidY: -10
         };
 
-        let verticalVelocity = 0;
-        let isGrounded = true;
+        let currentPlatforms = [];
 
-        let bobCycle = 0;
-        let bobFrequency = 0.2;
-        let bobAmplitudeX = 0.05;
-        let bobAmplitudeY = 0.1;
-        let walkCycle = 0;
+        function loadLevel(levelNum) {
+            // Clear existing platforms
+            currentPlatforms.forEach(platform => scene.remove(platform));
+            currentPlatforms = [];
 
-        function checkCollisions(newPosition) {
-            const playerRadius = 0.5;
-            
-            const allCollisionObjects = [
-                ...walls.map(w => w.wall), 
-                ...walls.map(w => w.topSurface),
-                ...obstacles.map(o => o.obstacle), 
-                ...obstacles.map(o => o.topSurface)
-            ];
-            
-            for (let obj of allCollisionObjects) {
-                const objBox = new THREE.Box3().setFromObject(obj);
-                
-                const collisionMargin = new THREE.Vector3(playerRadius, playerHeight/2, playerRadius);
-                const playerBox = new THREE.Box3(
-                    newPosition.clone().sub(collisionMargin),
-                    newPosition.clone().add(new THREE.Vector3(playerRadius, playerHeight, playerRadius))
-                );
-
-                if (playerBox.intersectsBox(objBox)) {
-                    return true;
-                }
-            }
-
-            const checkpointBox = new THREE.Box3().setFromObject(checkpoint);
-            if (new THREE.Box3().setFromObject(playerObject).intersectsBox(checkpointBox)) {
-                alert("Checkpoint reached! Great job!");
-            }
-
-            // Check if player falls off the ground platform
-            if (newPosition.x < -150 || newPosition.x > 150 || 
-                newPosition.z < -50 || newPosition.z > 50 || 
-                newPosition.y < -10) {  // Fall into void
-                // Respawn at start
-                playerObject.position.copy(startPosition);
-                verticalVelocity = 0;
-                isGrounded = true;
-            }
-
-            return false;
-        }
-
-        document.addEventListener('keydown', (event) => {
-            switch(event.key.toLowerCase()) {
-                case 'w': keys.w = true; break;
-                case 'a': keys.a = true; break;
-                case 's': keys.s = true; break;
-                case 'd': keys.d = true; break;
-                case 'shift': keys.shift = true; break;
-                case ' ': 
-                    keys.space = true;
-                    if (isGrounded) {
-                        verticalVelocity = jumpStrength;
-                        isGrounded = false;
-                    }
-                    break;
-            }
-        });
-
-        document.addEventListener('keyup', (event) => {
-            switch(event.key.toLowerCase()) {
-                case 'w': keys.w = false; break;
-                case 'a': keys.a = false; break;
-                case 's': keys.s = false; break;
-                case 'd': keys.d = false; break;
-                case 'shift': keys.shift = false; break;
-                case ' ': keys.space = false; break;
-            }
-        });
-
-        document.addEventListener('mousemove', (event) => {
-            playerObject.rotation.y -= event.movementX * 0.002;
-            
-            let pitch = camera.rotation.x - event.movementY * 0.002;
-            pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
-            camera.rotation.x = pitch;
-        });
-
-        renderer.domElement.addEventListener('click', () => {
-            renderer.domElement.requestPointerLock();
-        });
-
-        function renderMinimap() {
-            minimapContext.clearRect(0, 0, 200, 200);
-            minimapContext.fillStyle = 'gray';
-            minimapContext.fillRect(0, 0, 200, 200);
-
-            const mapScale = 2;
-
-            minimapContext.fillStyle = 'black';
-            walls.forEach(wall => {
-                const x = 100 + (wall.wall.position.x - playerObject.position.x) * mapScale;
-                const z = 100 + (wall.wall.position.z - playerObject.position.z) * mapScale;
-                
-                if (x >= 0 && x <= 200 && z >= 0 && z <= 200) {
-                    minimapContext.beginPath();
-                    minimapContext.rect(x, z, 10, 10);
-                    minimapContext.fill();
-                }
+            // Load new level
+            const levelData = levels[levelNum - 1];
+            levelData.forEach(platform => {
+                const geometry = new THREE.BoxGeometry(...platform.size);
+                const material = new THREE.MeshPhongMaterial({ color: platform.color });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(...platform.pos);
+                scene.add(mesh);
+                currentPlatforms.push(mesh);
             });
 
-            minimapContext.fillStyle = 'green';
-            obstacles.forEach(obstacle => {
-                const x = 100 + (obstacle.obstacle.position.x - playerObject.position.x) * mapScale;
-                const z = 100 + (obstacle.obstacle.position.z - playerObject.position.z) * mapScale;
-                
-                if (x >= 0 && x <= 200 && z >= 0 && z <= 200) {
-                    minimapContext.beginPath();
-                    minimapContext.rect(x, z, 5, 5);
-                    minimapContext.fill();
-                }
-            });
+            // Reset player position
+            resetPlayerPosition();
 
-            minimapContext.fillStyle = 'blue';
-            const checkpointX = 100 + (checkpoint.position.x - playerObject.position.x) * mapScale;
-            const checkpointZ = 100 + (checkpoint.position.z - playerObject.position.z) * mapScale;
+            // Point player towards the checkpoint platform
+            const finalPlatform = levelData[levelData.length - 1];
+            const [x, y, z] = finalPlatform.pos;
             
-            if (checkpointX >= 0 && checkpointX <= 200 && checkpointZ >= 0 && checkpointZ <= 200) {
-                minimapContext.beginPath();
-                minimapContext.arc(checkpointX, checkpointZ, 5, 0, Math.PI * 2);
-                minimapContext.fill();
-            }
+            // Calculate direction to checkpoint
+            const directionToCheckpoint = new THREE.Vector3(x, y, z).sub(player.position).normalize();
+            
+            // Set yaw and pitch to face the checkpoint
+            yaw = Math.atan2(directionToCheckpoint.x, directionToCheckpoint.z);
+            pitch = 0; // Reset pitch to horizontal
 
-            minimapContext.fillStyle = 'red';
-            minimapContext.beginPath();
-            minimapContext.arc(100, 100, 5, 0, Math.PI * 2);
-            minimapContext.fill();
+            levelDisplayElement.textContent = `Level: ${levelNum}`;
         }
 
-        function updateMovement() {
-            const moveDirection = new THREE.Vector3();
+        // Start game function
+        function startGame() {
+            menuElement.style.display = 'none';
+            document.body.requestPointerLock();
             
-            const currentSpeed = keys.shift ? baseSpeed * sprintMultiplier : baseSpeed;
+            // Start timer
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
 
-            let movementSpeedMultiplier = 1;
-            if (keys.a || keys.d) movementSpeedMultiplier = 0.7;
-            if (keys.s) movementSpeedMultiplier = 0.5;
-
-            if (keys.w) moveDirection.z -= 1;
-            if (keys.s) moveDirection.z += 1;
-            if (keys.a) moveDirection.x -= 1;
-            if (keys.d) moveDirection.x += 1;
-
-            moveDirection.normalize();
-
-            verticalVelocity -= gravity;
-            playerObject.position.y += verticalVelocity;
-
-            if (playerObject.position.y <= playerHeight) {
-                playerObject.position.y = playerHeight;
-                verticalVelocity = 0;
-                isGrounded = true;
-            }
-
-            if (moveDirection.length() > 0) {
-                walkCycle += bobFrequency;
-                const bobX = Math.sin(walkCycle) * bobAmplitudeX;
-                const bobY = Math.abs(Math.sin(walkCycle * 2)) * bobAmplitudeY;
-                camera.position.x = bobX;
-                camera.position.y = bobY;
-
-                const rotatedDirection = moveDirection.applyQuaternion(playerObject.quaternion);
-                const newPosition = playerObject.position.clone().add(
-                    rotatedDirection.multiplyScalar(currentSpeed * movementSpeedMultiplier)
-                );
-                
-                if (!checkCollisions(newPosition)) {
-                    playerObject.position.copy(newPosition);
-                }
-            }
+            // Load initial level explicitly here
+            loadLevel(player.currentLevel);
         }
 
+        // Update timer function
+        function updateTimer() {
+            const currentTime = Date.now();
+            const elapsedTime = currentTime - startTime;
+            const minutes = Math.floor(elapsedTime / 60000);
+            const seconds = Math.floor((elapsedTime % 60000) / 1000);
+            timerDisplay.textContent = `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Stop timer function
+        function stopTimer() {
+            clearInterval(timerInterval);
+            totalTime = Date.now() - startTime;
+        }
+
+        // Restart game function
+        function restartGame() {
+            // Stop and reset timer
+            clearInterval(timerInterval);
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            timerDisplay.textContent = 'Time: 0:00';
+            
+            // Hide final screen
+            finalScreen.style.display = 'none';
+            
+            // Reset game state
+            resetGame();
+        }
+
+        function resetGame() {
+            player.currentLevel = 1;
+            player.position.copy(player.spawnPoint);
+            loadLevel(player.currentLevel);
+            document.getElementById('level-display').textContent = 'Level: 1';
+        }
+
+        // Event listeners for menu and game controls
+        startGameButton.addEventListener('click', startGame);
+        colorSelect.addEventListener('change', (e) => {
+            scene.background = new THREE.Color(e.target.value);
+        });
+        restartGameButton.addEventListener('click', () => {
+            finalScreen.style.display = 'none';
+            restartGame();
+        });
+
+        // Controls
+        const keys = {};
+        let yaw = 0;
+        let pitch = 0;
+
+        document.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            // Reset game when 'r' is pressed
+            if (e.key.toLowerCase() === 'r') {
+                resetGame();
+            }
+        });
+        document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+        document.addEventListener('mousemove', e => {
+            // Only update camera if menu is not displayed
+            if (menuElement.style.display === 'none') {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+            }
+        });
+
+        document.addEventListener('click', () => {
+            if (menuElement.style.display === 'none') {
+                document.body.requestPointerLock();
+            }
+        });
+
+        function resetPlayerPosition() {
+            // Reset player to start of current level
+            const levelData = levels[player.currentLevel - 1];
+            const startPlatform = levelData[0];
+            const [x, y, z] = startPlatform.pos;
+            
+            player.position.set(x, y + player.height, z);
+            camera.position.copy(player.position);
+        }
+
+        // Collision detection
+        function checkCollision(position) {
+            const levelData = levels[player.currentLevel - 1];
+            for (const platform of levelData) {
+                const [x, y, z] = platform.pos;
+                const [width, height, depth] = platform.size;
+                
+                if (position.x >= x - width/2 && position.x <= x + width/2 &&
+                    position.z >= z - depth/2 && position.z <= z + depth/2 &&
+                    position.y <= y + height + player.height && position.y >= y + height) {
+                    return { collision: true, y: y + height + player.height, platform };
+                }
+            }
+            return { collision: false };
+        }
+
+        function checkCheckpoint(position) {
+            if (!player.canTransition) return false;
+            
+            const levelData = levels[player.currentLevel - 1];
+            const finalPlatform = levelData[levelData.length - 1];
+            const [x, y, z] = finalPlatform.pos;
+            const [width, height, depth] = finalPlatform.size;
+
+            // Stricter condition: player must be standing on the green platform
+            return (position.x >= x - width/2 && position.x <= x + width/2 &&
+                    position.z >= z - depth/2 && position.z <= z + depth/2 &&
+                    Math.abs(position.y - (y + height + player.height)) < 0.1);
+        }
+
+        function showCheckpointMessage() {
+            if (!player.canTransition) return;
+            
+            player.canTransition = false;
+            const message = document.getElementById('checkpoint-message');
+            message.style.display = 'block';
+            
+            setTimeout(() => {
+                message.style.display = 'none';
+                if (player.currentLevel < levels.length) {
+                    player.currentLevel++;
+                    loadLevel(player.currentLevel);
+                    setTimeout(() => {
+                        player.canTransition = true;
+                    }, 1000);
+                } else {
+                    // Game completed
+                    stopTimer();
+                    const minutes = Math.floor(totalTime / 60000);
+                    const seconds = Math.floor((totalTime % 60000) / 1000);
+                    finalTimeElement.textContent = `Final Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    finalScreen.style.display = 'flex';
+                }
+            }, 2000);
+        }
+
+        function updateViewBob() {
+            if (player.isGrounded && (keys['w'] || keys['s'] || keys['a'] || keys['d'])) {
+                const speed = player.sprinting ? 1.5 : 1;
+                player.bobOffset += player.bobFrequency * speed;
+                return Math.sin(player.bobOffset) * player.bobAmount;
+            }
+            return 0;
+        }
+
+        // Game loop
         function animate() {
             requestAnimationFrame(animate);
-            updateMovement();
-            renderMinimap();
+
+            // Sprint meter management
+            if (keys['shift'] && player.sprintEnergy > 0 && (keys['w'] || keys['s'] || keys['a'] || keys['d'])) {
+                player.sprinting = true;
+                player.sprintEnergy = Math.max(0, player.sprintEnergy - player.sprintDrain);
+            } else {
+                player.sprinting = false;
+                player.sprintEnergy = Math.min(100, player.sprintEnergy + player.sprintRecharge);
+            }
+
+            sprintProgressElement.style.width = player.sprintEnergy + '%';
+
+            // Fixed movement direction calculations
+            const forward = new THREE.Vector3(
+                -Math.sin(yaw),
+                0,
+                -Math.cos(yaw)
+            );
+            const right = new THREE.Vector3(
+                Math.sin(yaw + Math.PI/2),
+                0,
+                Math.cos(yaw + Math.PI/2)
+            );
+
+            const moveSpeed = player.sprinting ? player.maxSprintSpeed : player.maxSpeed;
+            const currentAcceleration = player.sprinting ? player.sprintAcceleration : player.acceleration;
+
+            if (keys['w']) {
+                player.velocity.x += forward.x * currentAcceleration;
+                player.velocity.z += forward.z * currentAcceleration;
+            }
+            if (keys['s']) {
+                player.velocity.x -= forward.x * currentAcceleration;
+                player.velocity.z -= forward.z * currentAcceleration;
+            }
+            if (keys['a']) {
+                player.velocity.x -= right.x * currentAcceleration;
+                player.velocity.z -= right.z * currentAcceleration;
+            }
+            if (keys['d']) {
+                player.velocity.x += right.x * currentAcceleration;
+                player.velocity.z += right.z * currentAcceleration;
+            }
+
+            // Jump
+            if (keys[' '] && player.canJump && player.isGrounded) {
+                player.velocity.y = player.jumpForce;
+                player.canJump = false;
+                player.isGrounded = false;
+            }
+
+            // Apply gravity
+            player.velocity.y -= player.gravity;
+
+            // Apply friction
+            const friction = player.isGrounded ? player.groundFriction : player.airFriction;
+            player.velocity.x *= friction;
+            player.velocity.z *= friction;
+
+            // Update position
+            player.position.add(player.velocity);
+
+            // Check for collisions
+            const collision = checkCollision(player.position);
+            if (collision.collision) {
+                player.position.y = collision.y;
+                player.velocity.y = 0;
+                player.isGrounded = true;
+                player.canJump = true;
+            } else {
+                player.isGrounded = false;
+            }
+
+            // Check if player fell into the void
+            if (player.position.y < player.voidY) {
+                // Reset to spawn point
+                player.position.copy(player.spawnPoint);
+                player.velocity.set(0, 0, 0);
+            }
+
+            // Update camera position and rotation
+            camera.position.copy(player.position);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.x = pitch;
+            camera.rotation.y = yaw;
+
+            // View bobbing
+            const bobAmount = updateViewBob();
+            camera.position.y += bobAmount;
+
+            // Check checkpoint
+            if (checkCheckpoint(player.position)) {
+                showCheckpointMessage();
+            }
+
+            // Render the scene
             renderer.render(scene, camera);
         }
 
+        // Initial scene setup
+        function initScene() {
+            // Define levels (this is a placeholder - to be added dynamically)
+            const levels = [
+                // Level 1 platforms: start platform, platforms, final checkpoint platform
+                [
+                    { pos: [0, 0, 0], size: [10, 1, 10], color: 0x00ff00 },  // Start platform (green)
+                    { pos: [5, 5, 10], size: [3, 1, 3], color: 0xcccccc },
+                    { pos: [10, 10, 20], size: [3, 1, 3], color: 0xcccccc },
+                    { pos: [15, 15, 30], size: [5, 1, 5], color: 0x00ff00 }  // Checkpoint platform (green)
+                ],
+                // Level 2 platforms (more challenging)
+                [
+                    { pos: [0, 0, 0], size: [10, 1, 10], color: 0x00ff00 },  // Start platform (green)
+                    { pos: [5, 5, 10], size: [2, 1, 2], color: 0xcccccc },
+                    { pos: [10, 10, 20], size: [1, 1, 1], color: 0xcccccc },
+                    { pos: [15, 15, 30], size: [3, 1, 3], color: 0x00ff00 }  // Checkpoint platform (green)
+                ],
+                // Level 3 platforms (most challenging)
+                [
+                    { pos: [0, 0, 0], size: [10, 1, 10], color: 0x00ff00 },  // Start platform (green)
+                    { pos: [5, 3, 10], size: [2, 1, 2], color: 0xcccccc },
+                    { pos: [10, 6, 20], size: [1, 1, 1], color: 0xcccccc },
+                    { pos: [15, 9, 30], size: [2, 1, 2], color: 0x00ff00 }  // Checkpoint platform (green)
+                ]
+            ];
+
+            // Expose levels to the global scope
+            window.levels = levels;
+        }
+
+        // Responsive rendering
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // Initialize the scene
+        initScene();
+
+        // Start the animation loop
         animate();
     </script>
 </body>
