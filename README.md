@@ -5,7 +5,7 @@
 ### Home Menu (Start Game, Controls, Background Color)
 ![Home Menu](menu.gif)
 
-### Movement and Level Flow
+### Movement (WASD + Mouse) and Level Flow
 ![Gameplay](gameplay.gif)
 
 ### Reset (R) Feature (Resets to Level 1 and Resets Timer)
