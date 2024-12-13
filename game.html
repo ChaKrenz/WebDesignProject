@@ -162,8 +162,8 @@
         </div>
         <label for="background-color">Background Color:</label>
         <select id="color-select">
+            <option value="#000000">Unselected</option>
             <option value="#87CEEB">Sky Blue</option>
-            <option value="#000000">Black</option>
             <option value="#2F4F4F">Dark Slate Gray</option>
             <option value="#191970">Midnight Blue</option>
         </select>
@@ -618,7 +618,7 @@
             keys[e.key.toLowerCase()] = true;
             // Reset game when 'r' is pressed
             if (e.key.toLowerCase() === 'r') {
-                resetGame();
+                restartGame();
             }
         });
         document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
